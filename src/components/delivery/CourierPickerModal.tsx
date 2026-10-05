@@ -1,5 +1,5 @@
 import { TruckIcon, UserIcon, CloseIcon } from '../icons'
-import type { Courier } from '../../lib/delivery'
+import { courierVehicleLabel, type Courier } from '../../lib/delivery'
 
 interface CourierPickerModalProps {
   couriers: Courier[]
@@ -50,10 +50,10 @@ export function CourierPickerModal({ couriers, busy, onPick, onClose }: CourierP
               </span>
               <span className="min-w-0">
                 <span className="block truncate text-[13.5px] font-bold text-[var(--ink)]">{courier.name}</span>
-                {courier.vehicle && (
+                {courierVehicleLabel(courier) && (
                   <span className="mt-0.5 flex items-center gap-1 text-[11.5px] text-[var(--ink-soft)]">
                     <TruckIcon className="h-3 w-3" />
-                    {courier.vehicle}
+                    {courierVehicleLabel(courier)}
                   </span>
                 )}
               </span>

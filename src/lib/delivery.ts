@@ -28,7 +28,7 @@ export interface DeliveryOrder {
   table_number: number | null
   created_at: string | null
   updated_at: string | null
-  courier: { id: string; name: string; phone: string | null } | null
+  courier: { id: string; name: string; phone: string | null; vehicle: string | null } | null
   courier_assigned_at: string | null
   customer: { name: string; phone: string }
   address: {
@@ -57,6 +57,19 @@ export interface Courier {
   name: string
   phone: string | null
   vehicle: string | null
+  linkedVehicle?: { license_plate: string; brand?: string | null; model?: string | null } | null
+}
+
+// "Honda CG 160 · ABC1D23" da moto cadastrada; sem moto vinculada usa o texto livre.
+export function courierVehicleLabel(courier: Pick<Courier, 'vehicle' | 'linkedVehicle'>): string {
+  const linked = courier.linkedVehicle
+  if (linked) {
+    const label = [[linked.brand, linked.model].filter(Boolean).join(' '), linked.license_plate]
+      .filter(Boolean)
+      .join(' · ')
+    if (label) return label
+  }
+  return courier.vehicle || ''
 }
 
 export function fetchActiveCouriers(token: string, companyId: string) {

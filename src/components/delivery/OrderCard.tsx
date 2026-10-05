@@ -75,6 +75,9 @@ export function OrderCard({ order, now, isNew, busy, onOpen, onAdvance }: OrderC
           <p className="mt-1.5 flex items-center gap-1.5 text-[12px] font-semibold text-[var(--blue-500)]">
             <UserIcon className="h-3.5 w-3.5 flex-none" />
             {order.courier.name}
+            {order.courier.vehicle && (
+              <span className="font-normal text-[var(--ink-soft)]">· {order.courier.vehicle}</span>
+            )}
           </p>
         )}
 
