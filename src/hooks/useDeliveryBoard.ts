@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { connectSocket } from '../lib/socket'
+import { playAlert } from '../lib/alertSound'
 import {
   assignDeliveryCourier,
   fetchActiveCouriers,
@@ -13,31 +14,6 @@ import { ApiError } from '../lib/api'
 import type { AuthSession, AuthCompany } from '../lib/auth'
 
 const REFRESH_MS = 45000
-
-// Bipe curto via Web Audio (sem arquivo de som). O navegador só libera áudio
-// depois de uma interação do usuário - por isso o alerta é ligado/desligado
-// por um botão no cabeçalho.
-function beep() {
-  try {
-    const AudioCtx =
-      window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
-    const ctx = new AudioCtx()
-    ;[0, 0.22].forEach((delay) => {
-      const osc = ctx.createOscillator()
-      const gain = ctx.createGain()
-      osc.type = 'sine'
-      osc.frequency.value = 880
-      gain.gain.value = 0.15
-      osc.connect(gain)
-      gain.connect(ctx.destination)
-      osc.start(ctx.currentTime + delay)
-      osc.stop(ctx.currentTime + delay + 0.16)
-    })
-    setTimeout(() => ctx.close(), 800)
-  } catch {
-    // sem áudio disponível: o destaque visual do card novo continua
-  }
-}
 
 export function useDeliveryBoard(session: AuthSession, company: AuthCompany, soundEnabled: boolean) {
   const [orders, setOrders] = useState<DeliveryOrder[]>([])
@@ -61,9 +37,16 @@ export function useDeliveryBoard(session: AuthSession, company: AuthCompany, sou
     incoming.forEach((order) => knownIds.current!.add(order.id))
     if (fresh.length) {
       setNewIds((current) => [...current, ...fresh.map((order) => order.id)])
-      if (soundRef.current) beep()
+      if (soundRef.current) playAlert()
     }
   }, [])
+
+  // Enquanto houver pedido novo sem atendimento, repete o alerta a cada 10 s.
+  useEffect(() => {
+    if (!soundEnabled || newIds.length === 0) return
+    const timer = setInterval(playAlert, 10000)
+    return () => clearInterval(timer)
+  }, [soundEnabled, newIds.length])
 
   const reload = useCallback(async () => {
     fetchActiveCouriers(session.token.token, company.id)

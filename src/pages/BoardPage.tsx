@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { useDeliveryBoard } from '../hooks/useDeliveryBoard'
 import { BOARD_COLUMNS, type DeliveryOrder, type DeliveryStatus } from '../lib/delivery'
 import { ApiError } from '../lib/api'
@@ -7,6 +7,7 @@ import { OrderDetailModal } from '../components/delivery/OrderDetailModal'
 import { CourierPickerModal } from '../components/delivery/CourierPickerModal'
 import { BellIcon, RefreshIcon, SearchIcon } from '../components/icons'
 import type { AuthSession, AuthCompany } from '../lib/auth'
+import { audioUnlocked, playAlert, subscribeAudioState, unlockAudio } from '../lib/alertSound'
 
 interface BoardPageProps {
   session: AuthSession
@@ -43,14 +44,30 @@ export function BoardPage({ session, company }: BoardPageProps) {
   const { orders, loading, error, connected, newIds, couriers, reload, changeStatus, setCourier, acknowledge } =
     useDeliveryBoard(session, company, soundEnabled)
 
+  const unlocked = useSyncExternalStore(subscribeAudioState, audioUnlocked)
+
+  // O navegador só libera áudio depois de uma interação: destrava no primeiro clique/toque/tecla.
+  useEffect(() => {
+    const unlock = () => {
+      unlockAudio()
+    }
+    window.addEventListener('pointerdown', unlock, { once: true })
+    window.addEventListener('keydown', unlock, { once: true })
+    return () => {
+      window.removeEventListener('pointerdown', unlock)
+      window.removeEventListener('keydown', unlock)
+    }
+  }, [])
+
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 30000)
     return () => clearInterval(timer)
   }, [])
 
-  function toggleSound() {
+  async function toggleSound() {
     const next = !soundEnabled
     setSoundEnabled(next)
+    if (next && (await unlockAudio())) playAlert()
     try {
       localStorage.setItem(SOUND_KEY, next ? '1' : '0')
     } catch {
@@ -177,6 +194,17 @@ export function BoardPage({ session, company }: BoardPageProps) {
             <BellIcon className="h-3.5 w-3.5" />
             {soundEnabled ? 'Som ligado' : 'Som desligado'}
           </button>
+          {soundEnabled && !unlocked && (
+            <button
+              type="button"
+              onClick={async () => {
+                if (await unlockAudio()) playAlert()
+              }}
+              className="rounded-lg bg-[var(--amber-100)] px-2.5 py-1.5 text-[12.5px] font-bold text-[var(--amber-500)]"
+            >
+              Som bloqueado pelo navegador — clique para ativar
+            </button>
+          )}
           <button
             type="button"
             onClick={reload}
