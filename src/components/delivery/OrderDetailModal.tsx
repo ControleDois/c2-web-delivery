@@ -6,6 +6,7 @@ import {
   formatMoney,
   formatTime,
   getNextAction,
+  type Courier,
   type DeliveryOrder,
   type DeliveryStatus,
 } from '../../lib/delivery'
@@ -15,8 +16,10 @@ interface OrderDetailModalProps {
   order: DeliveryOrder
   busy: boolean
   error: string | null
+  couriers: Courier[]
   onClose: () => void
   onAdvance: (status: DeliveryStatus) => void
+  onAssignCourier: (courierId: string | null) => void
 }
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
@@ -28,13 +31,23 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   )
 }
 
-export function OrderDetailModal({ order, busy, error, onClose, onAdvance }: OrderDetailModalProps) {
+export function OrderDetailModal({
+  order,
+  busy,
+  error,
+  couriers,
+  onClose,
+  onAdvance,
+  onAssignCourier,
+}: OrderDetailModalProps) {
   const [confirmingCancel, setConfirmingCancel] = useState(false)
   const next = getNextAction(order)
   const finished = order.status === 'completed' || order.status === 'canceled'
   const a = order.address
   const phoneDigits = order.customer.phone.replace(/\D/g, '')
-  const whatsappUrl = phoneDigits ? `https://wa.me/${phoneDigits.startsWith('55') ? phoneDigits : `55${phoneDigits}`}` : null
+  const whatsappUrl = phoneDigits
+    ? `https://wa.me/${phoneDigits.startsWith('55') ? phoneDigits : `55${phoneDigits}`}`
+    : null
   const canCancel = !finished && order.origin !== 'ifood'
 
   return (
@@ -50,7 +63,8 @@ export function OrderDetailModal({ order, busy, error, onClose, onAdvance }: Ord
                 Pedido #{order.external_display_id || order.code}
               </h2>
               <p className="mt-0.5 text-[12.5px] text-[var(--ink-soft)]">
-                {ORIGIN_LABELS[order.origin] ?? order.origin} · {formatTime(order.created_at)} · {STATUS_LABELS[order.status]}
+                {ORIGIN_LABELS[order.origin] ?? order.origin} · {formatTime(order.created_at)} ·{' '}
+                {STATUS_LABELS[order.status]}
               </p>
             </div>
             <button
@@ -95,6 +109,37 @@ export function OrderDetailModal({ order, busy, error, onClose, onAdvance }: Ord
                 )}
               </Row>
             </div>
+            {order.fulfillment_type !== 'pickup' && (
+              <div className="sm:col-span-2">
+                <Row label="Entregador">
+                  {finished || (couriers.length === 0 && !order.courier) ? (
+                    order.courier ? (
+                      order.courier.name
+                    ) : (
+                      '—'
+                    )
+                  ) : (
+                    <select
+                      value={order.courier?.id ?? ''}
+                      disabled={busy}
+                      onChange={(event) => onAssignCourier(event.target.value || null)}
+                      className="no-print w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-[13px] text-[var(--ink)] focus:border-[var(--blue-500)] focus:outline-none"
+                    >
+                      <option value="">Sem entregador</option>
+                      {order.courier && !couriers.some((item) => item.id === order.courier?.id) && (
+                        <option value={order.courier.id}>{order.courier.name}</option>
+                      )}
+                      {couriers.map((courier) => (
+                        <option key={courier.id} value={courier.id}>
+                          {courier.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {order.courier && <span className="hidden print:inline">{order.courier.name}</span>}
+                </Row>
+              </div>
+            )}
             {order.notes && (
               <div className="sm:col-span-2">
                 <Row label="Observações do cliente">{order.notes}</Row>
@@ -115,7 +160,9 @@ export function OrderDetailModal({ order, busy, error, onClose, onAdvance }: Ord
                 <tr key={item.id} className="border-t border-[var(--border)] align-top">
                   <td className="py-1.5 pr-2 text-[var(--ink)]">
                     {item.name}
-                    {item.observation && <span className="block text-[11.5px] text-[var(--ink-soft)]">{item.observation}</span>}
+                    {item.observation && (
+                      <span className="block text-[11.5px] text-[var(--ink-soft)]">{item.observation}</span>
+                    )}
                   </td>
                   <td className="py-1.5 text-right text-[var(--ink-soft)]">{item.quantity}</td>
                   <td className="py-1.5 text-right font-semibold text-[var(--ink)]">{formatMoney(item.total)}</td>
@@ -182,7 +229,9 @@ export function OrderDetailModal({ order, busy, error, onClose, onAdvance }: Ord
               </button>
             ))}
           {order.origin === 'ifood' && !finished && (
-            <span className="text-[11.5px] text-[var(--muted)]">Cancelamento do iFood é feito pelo portal do iFood.</span>
+            <span className="text-[11.5px] text-[var(--muted)]">
+              Cancelamento do iFood é feito pelo portal do iFood.
+            </span>
           )}
 
           {next && (

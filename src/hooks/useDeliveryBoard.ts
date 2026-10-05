@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { connectSocket } from '../lib/socket'
-import { fetchDeliveryBoard, updateDeliveryOrderStatus, type DeliveryOrder, type DeliveryStatus } from '../lib/delivery'
+import {
+  assignDeliveryCourier,
+  fetchActiveCouriers,
+  fetchDeliveryBoard,
+  updateDeliveryOrderStatus,
+  type Courier,
+  type DeliveryOrder,
+  type DeliveryStatus,
+} from '../lib/delivery'
 import { ApiError } from '../lib/api'
 import type { AuthSession, AuthCompany } from '../lib/auth'
 
@@ -11,7 +19,8 @@ const REFRESH_MS = 45000
 // por um botão no cabeçalho.
 function beep() {
   try {
-    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+    const AudioCtx =
+      window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
     const ctx = new AudioCtx()
     ;[0, 0.22].forEach((delay) => {
       const osc = ctx.createOscillator()
@@ -35,6 +44,7 @@ export function useDeliveryBoard(session: AuthSession, company: AuthCompany, sou
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [connected, setConnected] = useState(false)
+  const [couriers, setCouriers] = useState<Courier[]>([])
   const [newIds, setNewIds] = useState<string[]>([])
   const knownIds = useRef<Set<string> | null>(null)
   const soundRef = useRef(soundEnabled)
@@ -45,7 +55,9 @@ export function useDeliveryBoard(session: AuthSession, company: AuthCompany, sou
       knownIds.current = new Set(incoming.map((order) => order.id))
       return
     }
-    const fresh = incoming.filter((order) => !knownIds.current!.has(order.id) && order.status !== 'completed' && order.status !== 'canceled')
+    const fresh = incoming.filter(
+      (order) => !knownIds.current!.has(order.id) && order.status !== 'completed' && order.status !== 'canceled'
+    )
     incoming.forEach((order) => knownIds.current!.add(order.id))
     if (fresh.length) {
       setNewIds((current) => [...current, ...fresh.map((order) => order.id)])
@@ -54,6 +66,10 @@ export function useDeliveryBoard(session: AuthSession, company: AuthCompany, sou
   }, [])
 
   const reload = useCallback(async () => {
+    fetchActiveCouriers(session.token.token, company.id)
+      .then((res) => setCouriers(res.data || []))
+      .catch(() => {})
+
     try {
       const res = await fetchDeliveryBoard(session.token.token, company.id)
       registerArrivals(res.orders)
@@ -104,8 +120,8 @@ export function useDeliveryBoard(session: AuthSession, company: AuthCompany, sou
   }, [company.id, registerArrivals, reload])
 
   const changeStatus = useCallback(
-    async (id: string, status: DeliveryStatus) => {
-      const updated = await updateDeliveryOrderStatus(session.token.token, id, status)
+    async (id: string, status: DeliveryStatus, courierId?: string) => {
+      const updated = await updateDeliveryOrderStatus(session.token.token, id, status, courierId)
       setOrders((current) => current.map((item) => (item.id === id ? updated : item)))
       setNewIds((current) => current.filter((item) => item !== id))
       return updated
@@ -113,7 +129,16 @@ export function useDeliveryBoard(session: AuthSession, company: AuthCompany, sou
     [session.token.token]
   )
 
+  const setCourier = useCallback(
+    async (id: string, courierId: string | null) => {
+      const updated = await assignDeliveryCourier(session.token.token, id, courierId)
+      setOrders((current) => current.map((item) => (item.id === id ? updated : item)))
+      return updated
+    },
+    [session.token.token]
+  )
+
   const acknowledge = useCallback((id: string) => setNewIds((current) => current.filter((item) => item !== id)), [])
 
-  return { orders, loading, error, connected, newIds, reload, changeStatus, acknowledge }
+  return { orders, loading, error, connected, newIds, couriers, reload, changeStatus, setCourier, acknowledge }
 }

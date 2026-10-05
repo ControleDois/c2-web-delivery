@@ -4,6 +4,7 @@ import { BOARD_COLUMNS, type DeliveryOrder, type DeliveryStatus } from '../lib/d
 import { ApiError } from '../lib/api'
 import { OrderCard } from '../components/delivery/OrderCard'
 import { OrderDetailModal } from '../components/delivery/OrderDetailModal'
+import { CourierPickerModal } from '../components/delivery/CourierPickerModal'
 import { BellIcon, RefreshIcon, SearchIcon } from '../components/icons'
 import type { AuthSession, AuthCompany } from '../lib/auth'
 
@@ -37,12 +38,10 @@ export function BoardPage({ session, company }: BoardPageProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [pickingFor, setPickingFor] = useState<{ order: DeliveryOrder; status: DeliveryStatus } | null>(null)
 
-  const { orders, loading, error, connected, newIds, reload, changeStatus, acknowledge } = useDeliveryBoard(
-    session,
-    company,
-    soundEnabled
-  )
+  const { orders, loading, error, connected, newIds, couriers, reload, changeStatus, setCourier, acknowledge } =
+    useDeliveryBoard(session, company, soundEnabled)
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 30000)
@@ -66,18 +65,65 @@ export function BoardPage({ session, company }: BoardPageProps) {
       (order) =>
         order.customer.name.toLowerCase().includes(term) ||
         order.customer.phone.replace(/\D/g, '').includes(term.replace(/\D/g, '') || '§') ||
-        String(order.external_display_id || order.code).toLowerCase().includes(term)
+        String(order.external_display_id || order.code)
+          .toLowerCase()
+          .includes(term)
     )
   }, [orders, search])
 
-  const selected = selectedId ? orders.find((order) => order.id === selectedId) ?? null : null
+  const selected = selectedId ? (orders.find((order) => order.id === selectedId) ?? null) : null
 
-  async function handleAdvance(order: DeliveryOrder, status: DeliveryStatus) {
+  async function handleAdvance(order: DeliveryOrder, status: DeliveryStatus, courierId?: string) {
+    // Na saída para entrega pergunta quem vai levar, se já há entregadores
+    // cadastrados e o pedido ainda não tem um definido.
+    if (
+      status === 'out_for_delivery' &&
+      !courierId &&
+      !order.courier &&
+      order.fulfillment_type !== 'pickup' &&
+      couriers.length
+    ) {
+      setActionError(null)
+      setPickingFor({ order, status })
+      return
+    }
+
     setBusyId(order.id)
     setActionError(null)
     try {
-      await changeStatus(order.id, status)
+      await changeStatus(order.id, status, courierId)
       if (status === 'completed' || status === 'canceled') setSelectedId(null)
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : 'Não foi possível atualizar o pedido.')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  async function handleAssignCourier(order: DeliveryOrder, courierId: string | null) {
+    setBusyId(order.id)
+    setActionError(null)
+    try {
+      await setCourier(order.id, courierId)
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : 'Não foi possível atribuir o entregador.')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  async function handlePickCourier(courierId: string | null) {
+    if (!pickingFor) return
+    const { order, status } = pickingFor
+    if (courierId) {
+      setPickingFor(null)
+      await handleAdvance(order, status, courierId)
+      return
+    }
+    setPickingFor(null)
+    setBusyId(order.id)
+    try {
+      await changeStatus(order.id, status)
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : 'Não foi possível atualizar o pedido.')
     } finally {
@@ -108,10 +154,14 @@ export function BoardPage({ session, company }: BoardPageProps) {
         <div className="ml-auto flex items-center gap-2">
           <span
             className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] font-bold ${
-              connected ? 'bg-[var(--green-100)] text-[var(--green-600)]' : 'bg-[var(--amber-100)] text-[var(--amber-500)]'
+              connected
+                ? 'bg-[var(--green-100)] text-[var(--green-600)]'
+                : 'bg-[var(--amber-100)] text-[var(--amber-500)]'
             }`}
           >
-            <span className={`h-1.5 w-1.5 rounded-full ${connected ? 'bg-[var(--green-600)]' : 'bg-[var(--amber-500)]'}`} />
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${connected ? 'bg-[var(--green-600)]' : 'bg-[var(--amber-500)]'}`}
+            />
             {connected ? 'Ao vivo' : 'Reconectando…'}
           </span>
           <button
@@ -119,7 +169,9 @@ export function BoardPage({ session, company }: BoardPageProps) {
             onClick={toggleSound}
             title={soundEnabled ? 'Desligar som de novo pedido' : 'Ligar som de novo pedido'}
             className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12.5px] font-semibold ${
-              soundEnabled ? 'bg-[var(--blue-100)] text-[var(--blue-500)]' : 'text-[var(--muted)] hover:bg-[var(--page)]'
+              soundEnabled
+                ? 'bg-[var(--blue-100)] text-[var(--blue-500)]'
+                : 'text-[var(--muted)] hover:bg-[var(--page)]'
             }`}
           >
             <BellIcon className="h-3.5 w-3.5" />
@@ -159,9 +211,14 @@ export function BoardPage({ session, company }: BoardPageProps) {
               )
 
             return (
-              <section key={column.key} className="flex w-[280px] min-w-[260px] flex-1 flex-col rounded-xl bg-[var(--page)]">
+              <section
+                key={column.key}
+                className="flex w-[280px] min-w-[260px] flex-1 flex-col rounded-xl bg-[var(--page)]"
+              >
                 <header className="flex flex-none items-center justify-between px-3 py-2.5">
-                  <h2 className={`rounded-lg px-2.5 py-1 text-[12px] font-bold ${COLUMN_TONE[column.tone]}`}>{column.title}</h2>
+                  <h2 className={`rounded-lg px-2.5 py-1 text-[12px] font-bold ${COLUMN_TONE[column.tone]}`}>
+                    {column.title}
+                  </h2>
                   <span className="text-[12px] font-bold text-[var(--muted)]">{columnOrders.length}</span>
                 </header>
                 <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-2.5 pb-3">
@@ -192,8 +249,19 @@ export function BoardPage({ session, company }: BoardPageProps) {
           order={selected}
           busy={busyId === selected.id}
           error={actionError}
+          couriers={couriers}
           onClose={() => setSelectedId(null)}
           onAdvance={(status) => handleAdvance(selected, status)}
+          onAssignCourier={(courierId) => handleAssignCourier(selected, courierId)}
+        />
+      )}
+
+      {pickingFor && (
+        <CourierPickerModal
+          couriers={couriers}
+          busy={busyId === pickingFor.order.id}
+          onPick={handlePickCourier}
+          onClose={() => setPickingFor(null)}
         />
       )}
     </div>

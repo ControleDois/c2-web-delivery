@@ -10,7 +10,7 @@ import {
   type DeliveryOrder,
   type DeliveryStatus,
 } from '../../lib/delivery'
-import { ClockIcon, TruckIcon, BagIcon } from '../icons'
+import { ClockIcon, TruckIcon, BagIcon, UserIcon } from '../icons'
 
 interface OrderCardProps {
   order: DeliveryOrder
@@ -43,7 +43,9 @@ export function OrderCard({ order, now, isNew, busy, onOpen, onAdvance }: OrderC
     >
       <button type="button" onClick={onOpen} className="block w-full text-left">
         <div className="flex items-start justify-between gap-2">
-          <p className="min-w-0 truncate text-[13.5px] font-bold text-[var(--ink)]">{order.customer.name || 'Cliente'}</p>
+          <p className="min-w-0 truncate text-[13.5px] font-bold text-[var(--ink)]">
+            {order.customer.name || 'Cliente'}
+          </p>
           <span
             className={`flex flex-none items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${elapsedTone(minutes, finished)}`}
           >
@@ -61,13 +63,25 @@ export function OrderCard({ order, now, isNew, busy, onOpen, onAdvance }: OrderC
         </div>
 
         <p className="mt-2 flex items-start gap-1.5 text-[12px] text-[var(--ink-soft)]">
-          {isPickup ? <BagIcon className="mt-0.5 h-3.5 w-3.5 flex-none" /> : <TruckIcon className="mt-0.5 h-3.5 w-3.5 flex-none" />}
+          {isPickup ? (
+            <BagIcon className="mt-0.5 h-3.5 w-3.5 flex-none" />
+          ) : (
+            <TruckIcon className="mt-0.5 h-3.5 w-3.5 flex-none" />
+          )}
           <span className="min-w-0">{formatAddress(order)}</span>
         </p>
 
+        {order.courier && (
+          <p className="mt-1.5 flex items-center gap-1.5 text-[12px] font-semibold text-[var(--blue-500)]">
+            <UserIcon className="h-3.5 w-3.5 flex-none" />
+            {order.courier.name}
+          </p>
+        )}
+
         <div className="mt-2 flex items-center justify-between text-[12px]">
           <span className="text-[var(--muted)]">
-            {itemCount} {itemCount === 1 ? 'item' : 'itens'} · {PAYMENT_LABELS[order.payment_method] ?? order.payment_method}
+            {itemCount} {itemCount === 1 ? 'item' : 'itens'} ·{' '}
+            {PAYMENT_LABELS[order.payment_method] ?? order.payment_method}
           </span>
           <span className="text-[13px] font-bold text-[var(--ink)]">{formatMoney(order.total)}</span>
         </div>

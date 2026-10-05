@@ -1,13 +1,7 @@
 import { apiGet, apiPost } from './api'
 
 export type DeliveryStatus =
-  | 'pending'
-  | 'confirmed'
-  | 'preparing'
-  | 'ready_for_pickup'
-  | 'out_for_delivery'
-  | 'completed'
-  | 'canceled'
+  'pending' | 'confirmed' | 'preparing' | 'ready_for_pickup' | 'out_for_delivery' | 'completed' | 'canceled'
 
 export interface DeliveryOrderItem {
   id: string
@@ -34,6 +28,8 @@ export interface DeliveryOrder {
   table_number: number | null
   created_at: string | null
   updated_at: string | null
+  courier: { id: string; name: string; phone: string | null } | null
+  courier_assigned_at: string | null
   customer: { name: string; phone: string }
   address: {
     street: string | null
@@ -52,8 +48,23 @@ export function fetchDeliveryBoard(token: string, companyId: string) {
   return apiGet<{ orders: DeliveryOrder[]; server_time: string }>('/delivery-board', { companyId }, token)
 }
 
-export function updateDeliveryOrderStatus(token: string, id: string, status: DeliveryStatus) {
-  return apiPost<DeliveryOrder>(`/delivery-board/${id}/status`, { status }, token)
+export function updateDeliveryOrderStatus(token: string, id: string, status: DeliveryStatus, courierId?: string) {
+  return apiPost<DeliveryOrder>(`/delivery-board/${id}/status`, { status, courier_id: courierId }, token)
+}
+
+export interface Courier {
+  id: string
+  name: string
+  phone: string | null
+  vehicle: string | null
+}
+
+export function fetchActiveCouriers(token: string, companyId: string) {
+  return apiGet<{ data: Courier[] }>('/delivery-courier', { companyId, active: '1', limit: '200' }, token)
+}
+
+export function assignDeliveryCourier(token: string, id: string, courierId: string | null) {
+  return apiPost<DeliveryOrder>(`/delivery-board/${id}/courier`, { courier_id: courierId }, token)
 }
 
 export interface BoardColumn {
@@ -80,8 +91,20 @@ export const BOARD_COLUMNS: BoardColumn[] = [
     tone: 'blue',
     empty: 'Nenhum pedido pronto.',
   },
-  { key: 'completed', title: 'Concluídos', statuses: ['completed'], tone: 'green', empty: 'Nenhum pedido concluído hoje.' },
-  { key: 'canceled', title: 'Cancelados', statuses: ['canceled'], tone: 'muted', empty: 'Nenhum pedido cancelado hoje.' },
+  {
+    key: 'completed',
+    title: 'Concluídos',
+    statuses: ['completed'],
+    tone: 'green',
+    empty: 'Nenhum pedido concluído hoje.',
+  },
+  {
+    key: 'canceled',
+    title: 'Cancelados',
+    statuses: ['canceled'],
+    tone: 'muted',
+    empty: 'Nenhum pedido cancelado hoje.',
+  },
 ]
 
 export const STATUS_LABELS: Record<DeliveryStatus, string> = {
